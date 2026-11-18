@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import yfinance as yf
 import json
 import csv
+import time
 from datetime import datetime, timezone, timedelta
 
 # Malaysia Time is UTC+8
@@ -42,25 +43,37 @@ def parse_aastocks(html, source_key):
             if len(cols) >= 8:
                 index_name = cols[0].get_text(strip=True)
                 for target_name, config in TARGETS.items():
-                    if config["source"] == source_key and target_name in index_name:
-                        results[target_name] = {
-                            "Last": clean_text(cols[1].get_text(strip=True)),
-                            "Change": clean_text(cols[2].get_text(strip=True)),
-                            "Change %": clean_text(cols[3].get_text(strip=True)),
-                            "Turnover": clean_text(cols[4].get_text(strip=True)),
-                            "High": clean_text(cols[5].get_text(strip=True)),
-                            "Low": clean_text(cols[6].get_text(strip=True)),
-                            "Weekly Chg %": clean_text(cols[7].get_text(strip=True)),
-                            "Sources": [URLS[source_key]]
-                        }
+                    if config["source"] == source_key:
+                        # FIX: Normalize strings to ignore spaces and case (matches "S&P500" and "S&P 500")
+                        clean_target = target_name.replace(" ", "").lower()
+                        clean_index = index_name.replace(" ", "").lower()
+                        
+                        if clean_target in clean_index:
+                            results[target_name] = {
+                                "Last": clean_text(cols[1].get_text(strip=True)),
+                                "Change": clean_text(cols[2].get_text(strip=True)),
+                                "Change %": clean_text(cols[3].get_text(strip=True)),
+                                "Turnover": clean_text(cols[4].get_text(strip=True)),
+                                "High": clean_text(cols[5].get_text(strip=True)),
+                                "Low": clean_text(cols[6].get_text(strip=True)),
+                                "Weekly Chg %": clean_text(cols[7].get_text(strip=True)),
+                                "Sources": [URLS[source_key]]
+                            }
     return results
 
 def get_yfinance_data(ticker_symbol):
+    if not ticker_symbol:
+        return None
     try:
+        # FIX: Add a small delay to prevent GitHub Actions IP blocking
+        time.sleep(2) 
         ticker = yf.Ticker(ticker_symbol)
         hist = ticker.history(period="5d")
+        
         if hist.empty:
+            print(f"⚠️ Yahoo Finance returned empty data for {ticker_symbol}")
             return None
+            
         last = hist.iloc[-1]
         prev_close = hist.iloc[-2]['Close'] if len(hist) > 1 else last['Close']
         first_of_period = hist.iloc[0]['Close']
@@ -79,7 +92,8 @@ def get_yfinance_data(ticker_symbol):
             "Weekly Chg %": f"{weekly_chg_pct:+.2f}%",
             "Sources": [f"https://finance.yahoo.com/quote/{ticker_symbol.replace('^', '%5E')}/"]
         }
-    except Exception:
+    except Exception as e:
+        print(f"❌ Yahoo Finance failed for {ticker_symbol}: {e}")
         return None
 
 def main():
@@ -95,12 +109,14 @@ def main():
             scraped_data.update(parsed)
             if parsed:
                 used_sources.add(url)
+                print(f"✅ Scraped {len(parsed)} indices from {key}")
         except Exception as e:
             print(f"Failed to scrape {url}: {e}")
 
     # 2. Fallback to Yahoo Finance if data is missing or incomplete
     for target_name, config in TARGETS.items():
         if target_name not in scraped_data or scraped_data[target_name]["Last"] == "N/A":
+            print(f"⚠️ {target_name} missing from AASTOCKS, trying Yahoo Finance...")
             yf_data = get_yfinance_data(config["yf"])
             if yf_data:
                 scraped_data[target_name] = yf_data
@@ -138,7 +154,7 @@ def main():
             }
         })
 
-    # --- NEW: SAVE TO CSV FILE ---
+    # --- SAVE TO CSV FILE ---
     csv_filename = "market_data.csv"
     fieldnames = ["Data Timestamp", "Index", "Last", "Change", "Change %", "Turnover", "High", "Low", "Weekly Chg %", "Sources"]
     
@@ -149,12 +165,6 @@ def main():
             writer.writerow(row["values"])
     
     print(f"✅ Successfully saved data to {csv_filename}")
-    
-    # Also print a quick summary to console for the GitHub Actions log
-    print("\n--- Console Output Summary ---")
-    print(f"Timestamp: {TIMESTAMP}")
-    for row in dataset_write_rows:
-        print(f"{row['values']['Index']}: {row['values']['Last']} ({row['values']['Change %']})")
 
 if __name__ == "__main__":
     main()
