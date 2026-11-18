@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import yfinance as yf
 import json
+import csv
 from datetime import datetime, timezone, timedelta
 
 # Malaysia Time is UTC+8
@@ -116,23 +117,13 @@ def main():
 
     # 4. Format Output
     order = ["HSI", "HS TECH", "HS Red Chips", "HSCEI", "SSE", "S&P 500"]
-    
-    # Markdown Table
-    print(f"**Data Timestamp:** Latest available from source ({TIMESTAMP})\n")
-    print("| Index | Last | Change | Change % | Turnover | High | Low | Weekly Chg % |")
-    print("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
-    
     dataset_write_rows = []
     sources_list = []
 
     for idx in order:
         data = scraped_data[idx]
-        print(f"| {idx} | {data['Last']} | {data['Change']} | {data['Change %']} | {data['Turnover']} | {data['High']} | {data['Low']} | {data['Weekly Chg %']} |")
-        
         sources_list.extend(data["Sources"])
         dataset_write_rows.append({
-            "rowId": None,
-            "rowKey": None,
             "values": {
                 "Data Timestamp": TIMESTAMP,
                 "Index": idx,
@@ -147,10 +138,23 @@ def main():
             }
         })
 
-    print(f"\n**Sources:** {', '.join(list(dict.fromkeys(sources_list)))}\n")
-    print("```json")
-    print(json.dumps(dataset_write_rows, indent=2))
-    print("```")
+    # --- NEW: SAVE TO CSV FILE ---
+    csv_filename = "market_data.csv"
+    fieldnames = ["Data Timestamp", "Index", "Last", "Change", "Change %", "Turnover", "High", "Low", "Weekly Chg %", "Sources"]
+    
+    with open(csv_filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in dataset_write_rows:
+            writer.writerow(row["values"])
+    
+    print(f"✅ Successfully saved data to {csv_filename}")
+    
+    # Also print a quick summary to console for the GitHub Actions log
+    print("\n--- Console Output Summary ---")
+    print(f"Timestamp: {TIMESTAMP}")
+    for row in dataset_write_rows:
+        print(f"{row['values']['Index']}: {row['values']['Last']} ({row['values']['Change %']})")
 
 if __name__ == "__main__":
     main()
