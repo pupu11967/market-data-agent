@@ -40,15 +40,16 @@ def parse_aastocks(html, source_key):
         rows = table.find_all('tr')
         for row in rows:
             cols = row.find_all(['td', 'th'])
-            if len(cols) >= 8:
-                index_name = cols[0].get_text(strip=True)
-                for target_name, config in TARGETS.items():
-                    if config["source"] == source_key:
-                        # FIX: Normalize strings to ignore spaces and case (matches "S&P500" and "S&P 500")
-                        clean_target = target_name.replace(" ", "").lower()
-                        clean_index = index_name.replace(" ", "").lower()
-                        
-                        if clean_target in clean_index:
+            
+            for target_name, config in TARGETS.items():
+                if config["source"] == source_key:
+                    clean_target = target_name.replace(" ", "").lower()
+                    row_text = "".join([col.get_text(strip=True) for col in cols]).replace(" ", "").lower()
+                    
+                    if clean_target in row_text:
+                        # Found the row! Now extract based on column count
+                        if len(cols) >= 8:
+                            # HK / China format (8 columns)
                             results[target_name] = {
                                 "Last": clean_text(cols[1].get_text(strip=True)),
                                 "Change": clean_text(cols[2].get_text(strip=True)),
@@ -59,14 +60,32 @@ def parse_aastocks(html, source_key):
                                 "Weekly Chg %": clean_text(cols[7].get_text(strip=True)),
                                 "Sources": [URLS[source_key]]
                             }
+                        elif len(cols) >= 4:
+                            # World format (5 columns): Find the target column, then take the next 3
+                            target_idx = -1
+                            for i, col in enumerate(cols):
+                                if clean_target in col.get_text(strip=True).replace(" ", "").lower():
+                                    target_idx = i
+                                    break
+                            
+                            if target_idx != -1 and target_idx + 3 < len(cols):
+                                results[target_name] = {
+                                    "Last": clean_text(cols[target_idx + 1].get_text(strip=True)),
+                                    "Change": clean_text(cols[target_idx + 2].get_text(strip=True)),
+                                    "Change %": clean_text(cols[target_idx + 3].get_text(strip=True)),
+                                    "Turnover": "N/A",
+                                    "High": "N/A",
+                                    "Low": "N/A",
+                                    "Weekly Chg %": "N/A",
+                                    "Sources": [URLS[source_key]]
+                                }
     return results
 
 def get_yfinance_data(ticker_symbol):
     if not ticker_symbol:
         return None
     try:
-        # FIX: Add a small delay to prevent GitHub Actions IP blocking
-        time.sleep(2) 
+        time.sleep(2) # Prevent GitHub Actions IP blocking
         ticker = yf.Ticker(ticker_symbol)
         hist = ticker.history(period="5d")
         
@@ -150,7 +169,7 @@ def main():
                 "High": data["High"],
                 "Low": data["Low"],
                 "Weekly Chg %": data["Weekly Chg %"],
-                "Sources": ", ".join(list(dict.fromkeys(data["Sources"]))) # Deduplicate
+                "Sources": ", ".join(list(dict.fromkeys(data["Sources"])))
             }
         })
 
