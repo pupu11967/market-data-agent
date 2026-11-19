@@ -39,7 +39,6 @@ def parse_aastocks(html, source_key):
             if len(cols) < 4:
                 continue
             
-            # Search the ENTIRE row text for the target name
             row_text = " ".join([col.get_text(strip=True) for col in cols]).lower()
             
             for target_name, config in TARGETS.items():
@@ -48,7 +47,6 @@ def parse_aastocks(html, source_key):
                 
                 clean_target = target_name.replace(" ", "").lower()
                 if clean_target in row_text:
-                    # Find exactly which column holds the index name
                     name_col_idx = -1
                     for i, col in enumerate(cols):
                         if clean_target in col.get_text(strip=True).lower().replace(" ", ""):
@@ -56,7 +54,7 @@ def parse_aastocks(html, source_key):
                             break
                     
                     if name_col_idx != -1:
-                        if len(cols) >= 8: # HK/China format
+                        if len(cols) >= 8:
                             results[target_name] = {
                                 "Last": clean_text(cols[1].get_text(strip=True)),
                                 "Change": clean_text(cols[2].get_text(strip=True)),
@@ -67,7 +65,7 @@ def parse_aastocks(html, source_key):
                                 "Weekly Chg %": clean_text(cols[7].get_text(strip=True)),
                                 "Sources": [URLS[source_key]]
                             }
-                        else: # World format (Index name might be in col 0 or col 1)
+                        else:
                             results[target_name] = {
                                 "Last": clean_text(cols[name_col_idx + 1].get_text(strip=True)),
                                 "Change": clean_text(cols[name_col_idx + 2].get_text(strip=True)),
@@ -75,14 +73,14 @@ def parse_aastocks(html, source_key):
                                 "Turnover": "N/A", "High": "N/A", "Low": "N/A", "Weekly Chg %": "N/A",
                                 "Sources": [URLS[source_key]]
                             }
-                        print(f"✅ AASTOCKS: Found {target_name} at {results[target_name]['Last']}")
+                        print(f"✅ AASTOCKS: Found {target_name} -> Last: {results[target_name]['Last']}")
     return results
 
 def get_yfinance_data(ticker_symbol, target_name):
     if not ticker_symbol:
         return None
     try:
-        print(f"🔄 Trying Yahoo Finance fallback for {target_name} ({ticker_symbol})...")
+        print(f"🔄 Trying Yahoo Finance for {target_name} ({ticker_symbol})...")
         time.sleep(2)
         ticker = yf.Ticker(ticker_symbol)
         hist = ticker.history(period="5d")
@@ -95,8 +93,7 @@ def get_yfinance_data(ticker_symbol, target_name):
         first = hist.iloc[0]['Close']
         change = last['Close'] - prev_close
         
-        print(f"✅ Yahoo Finance SUCCESS: {target_name} = {last['Close']:,.2f}")
-        return {
+        result = {
             "Last": f"{last['Close']:,.2f}",
             "Change": f"{change:+,.2f}",
             "Change %": f"{(change/prev_close)*100:+.2f}%",
@@ -106,11 +103,14 @@ def get_yfinance_data(ticker_symbol, target_name):
             "Weekly Chg %": f"{((last['Close']-first)/first)*100:+.2f}%",
             "Sources": [f"https://finance.yahoo.com/quote/{ticker_symbol.replace('^','%5E')}/"]
         }
+        print(f"✅ Yahoo Finance SUCCESS: {target_name} = {result['Last']}")
+        return result
     except Exception as e:
         print(f"❌ Yahoo Finance failed: {e}")
         return None
 
 def main():
+    print("🚀 STARTING SCRIPT...")
     scraped_data = {}
 
     # 1. Scrape AASTOCKS
@@ -123,20 +123,25 @@ def main():
         except Exception as e:
             print(f"❌ Failed to scrape {url}: {e}")
 
-    # 2. Fallback to Yahoo Finance for anything missing or N/A
+    # 2. Fallback to Yahoo Finance for anything missing or blank
     for target_name, config in TARGETS.items():
-        if target_name not in scraped_data or scraped_data[target_name]["Last"] == "N/A":
-            print(f"⚠️ {target_name} missing from AASTOCKS. Triggering fallback...")
+        current_data = scraped_data.get(target_name, {})
+        if not current_data or current_data.get("Last") == "N/A" or current_data.get("Last") == "":
+            print(f"⚠️ {target_name} is missing or blank. Triggering Yahoo Finance fallback...")
             yf_data = get_yfinance_data(config["yf"], target_name)
             if yf_data:
                 scraped_data[target_name] = yf_data
 
     # 3. Ensure all targets exist with N/A fallback
     for target_name in TARGETS:
-        scraped_data.setdefault(target_name, {
-            "Last": "N/A", "Change": "N/A", "Change %": "N/A", "Turnover": "N/A",
-            "High": "N/A", "Low": "N/A", "Weekly Chg %": "N/A", "Sources": ["N/A"]
-        })
+        if target_name not in scraped_data:
+            scraped_data[target_name] = {
+                "Last": "N/A", "Change": "N/A", "Change %": "N/A", "Turnover": "N/A",
+                "High": "N/A", "Low": "N/A", "Weekly Chg %": "N/A", "Sources": ["N/A"]
+            }
+
+    # 🔍 THIS IS THE MAGIC LINE: It tells us exactly what the script sees before saving
+    print(f"🔍 FINAL CHECK: S&P 500 data before saving: {scraped_data.get('S&P 500')}")
 
     # 4. Save to CSV
     order = ["HSI", "HS TECH", "HS Red Chips", "HSCEI", "SSE", "S&P 500"]
@@ -151,7 +156,7 @@ def main():
                 "Data Timestamp": TIMESTAMP, "Index": idx, "Last": d["Last"],
                 "Change": d["Change"], "Change %": d["Change %"], "Turnover": d["Turnover"],
                 "High": d["High"], "Low": d["Low"], "Weekly Chg %": d["Weekly Chg %"],
-                "Sources": d["Sources"][0]
+                "Sources": d["Sources"][0] if isinstance(d["Sources"], list) else d["Sources"]
             })
     print("✅ Script finished. Saved market_data.csv")
 
