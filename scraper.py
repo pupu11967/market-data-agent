@@ -47,7 +47,6 @@ def parse_aastocks(html, source_key):
                     
                     clean_target = target_name.replace(" ", "").lower()
                     
-                    # ✅ CRITICAL FIX: EXACT MATCH ONLY. No more "HSI" matching "VHSI"!
                     if clean_col == clean_target:
                         if source_key in ["hk", "china"] and len(cols) >= 8:
                             results[target_name] = {
@@ -61,7 +60,6 @@ def parse_aastocks(html, source_key):
                                 "Sources": [URLS[source_key]]
                             }
                         elif source_key == "world" and len(cols) >= 5:
-                            # World table: Index name is in column `i`. Data follows immediately.
                             results[target_name] = {
                                 "Last": clean_text(cols[i + 1].get_text(strip=True)),
                                 "Change": clean_text(cols[i + 2].get_text(strip=True)),
@@ -75,35 +73,44 @@ def parse_aastocks(html, source_key):
 def get_yfinance_data(ticker_symbol, target_name):
     if not ticker_symbol:
         return None
-    try:
-        print(f"🔄 Trying Yahoo Finance for {target_name} ({ticker_symbol})...")
-        time.sleep(2) # Be polite to Yahoo servers
-        ticker = yf.Ticker(ticker_symbol)
-        hist = ticker.history(period="5d")
-        if hist.empty:
-            print(f"⚠️ Yahoo Finance returned empty for {ticker_symbol}")
-            return None
+    
+    # Try primary ticker, fallback to SPY (S&P 500 ETF) if ^GSPC is blocked
+    tickers_to_try = [ticker_symbol]
+    if ticker_symbol == "^GSPC":
+        tickers_to_try.append("SPY")
         
-        last = hist.iloc[-1]
-        prev_close = hist.iloc[-2]['Close'] if len(hist) > 1 else last['Close']
-        first = hist.iloc[0]['Close']
-        change = last['Close'] - prev_close
-        
-        result = {
-            "Last": f"{last['Close']:,.2f}",
-            "Change": f"{change:+,.2f}",
-            "Change %": f"{(change/prev_close)*100:+.2f}%",
-            "Turnover": "N/A",
-            "High": f"{last['High']:,.2f}",
-            "Low": f"{last['Low']:,.2f}",
-            "Weekly Chg %": f"{((last['Close']-first)/first)*100:+.2f}%",
-            "Sources": [f"https://finance.yahoo.com/quote/{ticker_symbol.replace('^','%5E')}/"]
-        }
-        print(f"✅ Yahoo Finance SUCCESS: {target_name} = {result['Last']}")
-        return result
-    except Exception as e:
-        print(f"❌ Yahoo Finance failed: {e}")
-        return None
+    for ticker_sym in tickers_to_try:
+        try:
+            print(f"🔄 Trying Yahoo Finance for {target_name} using {ticker_sym}...")
+            time.sleep(2) # Be polite to Yahoo servers
+            ticker = yf.Ticker(ticker_sym)
+            hist = ticker.history(period="5d")
+            
+            if hist.empty:
+                print(f"⚠️ Yahoo Finance returned empty for {ticker_sym}")
+                continue
+            
+            last = hist.iloc[-1]
+            prev_close = hist.iloc[-2]['Close'] if len(hist) > 1 else last['Close']
+            first = hist.iloc[0]['Close']
+            change = last['Close'] - prev_close
+            
+            print(f"✅ Yahoo Finance SUCCESS: {target_name} = {last['Close']:,.2f} (via {ticker_sym})")
+            return {
+                "Last": f"{last['Close']:,.2f}",
+                "Change": f"{change:+,.2f}",
+                "Change %": f"{(change/prev_close)*100:+.2f}%",
+                "Turnover": "N/A",
+                "High": f"{last['High']:,.2f}",
+                "Low": f"{last['Low']:,.2f}",
+                "Weekly Chg %": f"{((last['Close']-first)/first)*100:+.2f}%",
+                "Sources": [f"https://finance.yahoo.com/quote/{ticker_sym.replace('^','%5E')}/"]
+            }
+        except Exception as e:
+            print(f"❌ Yahoo Finance failed for {ticker_sym}: {e}")
+            continue
+            
+    return None
 
 def main():
     print("🚀 STARTING SCRIPT...")
