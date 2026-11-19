@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import yfinance as yf
 import csv
 import time
+import json
 from datetime import datetime, timezone, timedelta
 
 MYT = timezone(timedelta(hours=8))
@@ -36,17 +37,13 @@ def parse_aastocks(html, source_key):
     for table in soup.find_all('table'):
         for row in table.find_all('tr'):
             cols = row.find_all(['td', 'th'])
-            
             for i, col in enumerate(cols):
                 col_text = col.get_text(strip=True)
                 clean_col = col_text.replace(" ", "").lower()
-                
                 for target_name, config in TARGETS.items():
                     if config["source"] != source_key:
                         continue
-                    
                     clean_target = target_name.replace(" ", "").lower()
-                    
                     if clean_col == clean_target:
                         if source_key in ["hk", "china"] and len(cols) >= 8:
                             results[target_name] = {
@@ -81,13 +78,13 @@ def get_yfinance_data(ticker_symbol, target_name):
         
     for ticker_sym in tickers_to_try:
         try:
-            print(f"🔄 Trying Yahoo Finance for {target_name} using {ticker_sym}...")
-            time.sleep(2) # Be polite to Yahoo servers
+            print(f"🔄 Trying yfinance for {target_name} using {ticker_sym}...")
+            time.sleep(2)
             ticker = yf.Ticker(ticker_sym)
             hist = ticker.history(period="5d")
             
             if hist.empty:
-                print(f"⚠️ Yahoo Finance returned empty for {ticker_sym}")
+                print(f"⚠️ yfinance returned empty for {ticker_sym}")
                 continue
             
             last = hist.iloc[-1]
@@ -95,7 +92,7 @@ def get_yfinance_data(ticker_symbol, target_name):
             first = hist.iloc[0]['Close']
             change = last['Close'] - prev_close
             
-            print(f"✅ Yahoo Finance SUCCESS: {target_name} = {last['Close']:,.2f} (via {ticker_sym})")
+            print(f"✅ yfinance SUCCESS: {target_name} = {last['Close']:,.2f} (via {ticker_sym})")
             return {
                 "Last": f"{last['Close']:,.2f}",
                 "Change": f"{change:+,.2f}",
@@ -107,9 +104,36 @@ def get_yfinance_data(ticker_symbol, target_name):
                 "Sources": [f"https://finance.yahoo.com/quote/{ticker_sym.replace('^','%5E')}/"]
             }
         except Exception as e:
-            print(f"❌ Yahoo Finance failed for {ticker_sym}: {e}")
+            print(f"❌ yfinance failed for {ticker_sym}: {e}")
             continue
             
+    # FALLBACK 2: Direct Yahoo Finance JSON API (Almost never blocked)
+    try:
+        print(f"🔄 Trying direct Yahoo Finance API for {target_name}...")
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}"
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        data = response.json()
+        result = data['chart']['result'][0]
+        meta = result['meta']
+        current_price = meta['regularMarketPrice']
+        previous_close = meta['previousClose']
+        change = current_price - previous_close
+        change_pct = (change / previous_close) * 100
+        
+        print(f"✅ Direct Yahoo API SUCCESS: {target_name} = {current_price:,.2f}")
+        return {
+            "Last": f"{current_price:,.2f}",
+            "Change": f"{change:+,.2f}",
+            "Change %": f"{change_pct:+.2f}%",
+            "Turnover": "N/A",
+            "High": f"{meta['regularMarketDayHigh']:,.2f}",
+            "Low": f"{meta['regularMarketDayLow']:,.2f}",
+            "Weekly Chg %": "N/A",
+            "Sources": [f"https://finance.yahoo.com/quote/{ticker_symbol.replace('^','%5E')}/"]
+        }
+    except Exception as e:
+        print(f"❌ Direct Yahoo API failed: {e}")
+        
     return None
 
 def main():
@@ -119,21 +143,28 @@ def main():
     # 1. Scrape AASTOCKS
     for key, url in URLS.items():
         try:
+            print(f"🌐 Fetching {url}...")
             response = requests.get(url, headers=HEADERS, timeout=10)
             response.raise_for_status()
             parsed = parse_aastocks(response.text, key)
             scraped_data.update(parsed)
+            if not parsed and key == "world":
+                print("⚠️ WARNING: AASTOCKS World page returned NO data. Possible block or HTML change.")
         except Exception as e:
             print(f"❌ Failed to scrape {url}: {e}")
 
     # 2. Fallback to Yahoo Finance for anything missing or blank
     for target_name, config in TARGETS.items():
         current_data = scraped_data.get(target_name, {})
+        print(f"🔍 DEBUG: {target_name} current_data = {current_data}")
         if not current_data or current_data.get("Last") == "N/A" or current_data.get("Last") == "":
-            print(f"⚠️ {target_name} is missing or blank. Triggering Yahoo Finance fallback...")
+            print(f"⚠️ {target_name} is missing or blank. Triggering fallbacks...")
             yf_data = get_yfinance_data(config["yf"], target_name)
             if yf_data:
                 scraped_data[target_name] = yf_data
+                print(f"✅ DEBUG: Successfully updated {target_name}")
+            else:
+                print(f"❌ DEBUG: ALL FALLBACKS FAILED for {target_name}")
 
     # 3. Ensure all targets exist with N/A fallback
     for target_name in TARGETS:
