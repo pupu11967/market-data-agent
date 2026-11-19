@@ -36,25 +36,20 @@ def parse_aastocks(html, source_key):
     for table in soup.find_all('table'):
         for row in table.find_all('tr'):
             cols = row.find_all(['td', 'th'])
-            if len(cols) < 4:
-                continue
             
-            row_text = " ".join([col.get_text(strip=True) for col in cols]).lower()
-            
-            for target_name, config in TARGETS.items():
-                if config["source"] != source_key:
-                    continue
+            for i, col in enumerate(cols):
+                col_text = col.get_text(strip=True)
+                clean_col = col_text.replace(" ", "").lower()
                 
-                clean_target = target_name.replace(" ", "").lower()
-                if clean_target in row_text:
-                    name_col_idx = -1
-                    for i, col in enumerate(cols):
-                        if clean_target in col.get_text(strip=True).lower().replace(" ", ""):
-                            name_col_idx = i
-                            break
+                for target_name, config in TARGETS.items():
+                    if config["source"] != source_key:
+                        continue
                     
-                    if name_col_idx != -1:
-                        if len(cols) >= 8:
+                    clean_target = target_name.replace(" ", "").lower()
+                    
+                    # ✅ CRITICAL FIX: EXACT MATCH ONLY. No more "HSI" matching "VHSI"!
+                    if clean_col == clean_target:
+                        if source_key in ["hk", "china"] and len(cols) >= 8:
                             results[target_name] = {
                                 "Last": clean_text(cols[1].get_text(strip=True)),
                                 "Change": clean_text(cols[2].get_text(strip=True)),
@@ -65,11 +60,12 @@ def parse_aastocks(html, source_key):
                                 "Weekly Chg %": clean_text(cols[7].get_text(strip=True)),
                                 "Sources": [URLS[source_key]]
                             }
-                        else:
+                        elif source_key == "world" and len(cols) >= 5:
+                            # World table: Index name is in column `i`. Data follows immediately.
                             results[target_name] = {
-                                "Last": clean_text(cols[name_col_idx + 1].get_text(strip=True)),
-                                "Change": clean_text(cols[name_col_idx + 2].get_text(strip=True)),
-                                "Change %": clean_text(cols[name_col_idx + 3].get_text(strip=True)),
+                                "Last": clean_text(cols[i + 1].get_text(strip=True)),
+                                "Change": clean_text(cols[i + 2].get_text(strip=True)),
+                                "Change %": clean_text(cols[i + 3].get_text(strip=True)),
                                 "Turnover": "N/A", "High": "N/A", "Low": "N/A", "Weekly Chg %": "N/A",
                                 "Sources": [URLS[source_key]]
                             }
@@ -81,7 +77,7 @@ def get_yfinance_data(ticker_symbol, target_name):
         return None
     try:
         print(f"🔄 Trying Yahoo Finance for {target_name} ({ticker_symbol})...")
-        time.sleep(2)
+        time.sleep(2) # Be polite to Yahoo servers
         ticker = yf.Ticker(ticker_symbol)
         hist = ticker.history(period="5d")
         if hist.empty:
@@ -140,7 +136,7 @@ def main():
                 "High": "N/A", "Low": "N/A", "Weekly Chg %": "N/A", "Sources": ["N/A"]
             }
 
-    # 🔍 THIS IS THE MAGIC LINE: It tells us exactly what the script sees before saving
+    # 🔍 FINAL CHECK
     print(f"🔍 FINAL CHECK: S&P 500 data before saving: {scraped_data.get('S&P 500')}")
 
     # 4. Save to CSV
