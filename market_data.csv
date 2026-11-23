@@ -1,7 +1,7 @@
 Data Timestamp,Index,Last,Change,Change %,Turnover,High,Low,Weekly Chg %,Sources
-2026/11/23 16:59 MYT,HSI,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
-2026/11/23 16:59 MYT,HS TECH,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
-2026/11/23 16:59 MYT,HS Red Chips,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
-2026/11/23 16:59 MYT,HSCEI,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
-2026/11/23 16:59 MYT,SSE,"3,538.95",+5.15,+0.15%,N/A,"3,544.60","3,476.65",N/A,https://finance.yahoo.com/quote/000001.SS/
-2026/11/23 16:59 MYT,S&P 500,"6,910.39",-265.44,-3.70%,N/A,"7,198.67","6,882.66",N/A,https://finance.yahoo.com/quote/%5EGSPC/
+2026/11/23 17:05 MYT,HSI,"22,383.74",-27.06,-0.12%,253.09B,"22,436.18","21,998.05",-0.12%,https://www.aastocks.com/en/stocks/market/index/hk-index.aspx
+2026/11/23 17:05 MYT,HS TECH,"3,508.00",-3.14,-0.09%,68.68B,"3,524.74","3,395.38",-0.09%,https://www.aastocks.com/en/stocks/market/index/hk-index.aspx
+2026/11/23 17:05 MYT,HS Red Chips,"3,750.38",-37.12,-0.98%,6.89B,"3,779.73","3,712.10",-0.98%,https://www.aastocks.com/en/stocks/market/index/hk-index.aspx
+2026/11/23 17:05 MYT,HSCEI,"7,527.98",-26.39,-0.35%,80.63B,"7,550.51","7,406.35",-0.35%,https://www.aastocks.com/en/stocks/market/index/hk-index.aspx
+2026/11/23 17:05 MYT,SSE,"3,538.95",+5.16,+0.15%,"3,544.60","3,476.65","3,503.52",-2.62%,https://www.aastocks.com/en/stocks/market/index/china-index.aspx
+2026/11/23 17:05 MYT,S&P 500,"6,910.39",-265.44,-3.70%,N/A,"7,198.67","6,882.66",N/A,https://finance.yahoo.com/quote/%5EGSPC/
