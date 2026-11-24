@@ -2,8 +2,8 @@ name: Daily Market Data Scraper
 
 on:
   schedule:
-    # 4:30 PM Malaysia Time = 08:30 UTC
-    - cron: '30 8 * * *'
+    # 4:05 PM Malaysia Time = 08:05 UTC
+    - cron: '5 8 * * *'
   workflow_dispatch: # Allows manual triggering
 
 jobs:
